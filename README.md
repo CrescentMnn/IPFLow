@@ -27,7 +27,7 @@ This will help me outline the process of the analysis and capture of packets, as
 
 The second phase is aimed to be the final phase of the project, migrating from offline reading and analysing to real time capture and analysis (thus real time detection and prevention of threats will follow), using the foundations built on phase one this will help my project be more structured and developed, decreasing the chances of system breaking errors and majoir security flaws (overlook of important data).
 
-This means that my project will achieve two different goals, the first one will be that of a **forensic analysis** software, and the second one will be the true *IDS* deployement.
+This means that my project will achieve two different goals, the first one will be that of a *forensic analysis* software, and the second one will be the true *IDS* deployement.
 
 ## Packet capture
 
