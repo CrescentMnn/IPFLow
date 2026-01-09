@@ -1,5 +1,8 @@
 #include <iostream>
 #include <IPv4Layer.h>
+#include <TcpLayer.h>
+#include <UdpLayer.h>
+#include <IcmpLayer.h>
 #include <Packet.h>
 #include <PcapFileDevice.h>
 
@@ -28,8 +31,9 @@ enum class TransportProtocol : uint8_t{
     OTHER;
 }
 
-struct flow{
+struct flow_seq{
     pcpp::IPv4Address srcIP;
+    pcpp::IPv4Address dstIP;
     TransportProtocol protocol;
     uint16_t srcPort;
     uint16_t dstPort;
@@ -42,24 +46,55 @@ struct flow{
     double lasst_seen;
 }
 
-int check_threshold(const std::unique_ptr<pcpp::IFileReaderDevice> &reader){
+flow_seq check_flow(const std::unique_ptr<pcpp::IFileReaderDevice> &reader){
    pcpp::RawPacket rawPacket;
-   
+   flow_seq flow;
+
+   //will add flow parameters here
    while(reader->getNextPacket(rawPacket)){
 	pcapp::Packet parsedPacket(&rawPacket);
         if(parsedPacket.isPacketOfType(pcpp::IPv4)){
 	    pcpp::IPv4Address srcIP = parsedPacket.getLayerOfType<pcpp::IPv4Layer>()->getSrcIPv4Address();
+	    flow.srcIP = srcIP;
 	    pcpp::IPv4Address dstIP = parsedPacket.getLayerOfType<pcpp::IPv4Layer>()->getDstIPv4Address();
+	    flow.dstIP = dstIP;
 
 	    if(parsedPacket.isOfType(pcpp::TCP)){
+	        flow.protocol = 0;
+		auto* tcpLayer = parsedPacket.getLayerOfType<pcpp::TcpLayer>();
+		if(tcpLayer == nullptr){
+		    std::cerr << "Something went wrong with TCP layer..." << std::endl; return 1;
+		}
+		flow.srcPort = tcpLayer.getSrcPort();
+		flow.dstPort = tcpLayer.getDstPort();
+	    }else if(parsedPacket.isOfType(pcpp::UDP)){
+		flow.protocol = 1;
+		auto* udpLayer = parsedPacket.getLayerOfType<pcpp::UdpLayer>();
+		if(udpLayer == nullptr){
+		    std::cerr << "Something went wrong with UDP layer..." << std::endl; return 1;
+		}
+		flow.srcPort = udpLayer.getSrcPort();
+		flow.dstPort = udpLayer.getDstPort();
+	    }else if(parsedPacket.isOfType(pcpp::ICMP)){
+		flow.protocol = 2;
+		auto* icmpLayer = parsedPacket.getLayerOfType<pcpp::IcmpLayer>();
+		if(icmpLayer == nullptr){
+		    std::cerr << "Something went wrong with ICMP layer..." << std::endl; return 1;
+		}
+                flow.srcPort = 0;
+		flow.dstPort = 0;
+    		//maybe ICMP object is unnecesary to this
+	    }else{
+	        flow.protocol = 3;
 	    }
-	    if(parsedPacket.isOfType(pcpp::UDP)){
-	    }
-	    if(parsedPacket.isOfType(pcpp::ICMP)){
-	    }
-	}
-   }
 
+	    auto rawPacket = parsedPacket.getRawPacket();
+	    flow.first_seen = rawPacket.getPacketTimeStamp();
+	    flow.byte_count += rawPacket.getRawDataLen();
+	    flow.packet_count++;
+	}
+    }
+    return flow;
 }
 
 int main(){
