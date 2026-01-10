@@ -1,10 +1,14 @@
 #include <iostream>
+#include <cstddef>
+#include <unordered_map>
 #include <IPv4Layer.h>
 #include <TcpLayer.h>
 #include <UdpLayer.h>
 #include <IcmpLayer.h>
 #include <Packet.h>
 #include <PcapFileDevice.h>
+
+#include "hash_functions.h"
 
 struct ThresholdConfig {
     //DDoS thresh
@@ -43,7 +47,32 @@ struct flow_seq{
     uint64_t byte_count;
     //timestamps
     double first_seen;
-    double lasst_seen;
+    double last_seen;
+}
+
+//this will make the flow
+struct map_val{
+    pcpp::IPv4Address srcIP;
+    pcpp::IPv4Address dstIP;
+    uint16_t srcPort;
+    uint16_t dstPort;
+    TransportProtocol protocol;
+}
+
+//apply hash for hash key
+size_t create_key(const map_val& values){
+    std::string srcIP = values.srcIP.toString();
+    std::string dstIP = values.dstIP.toString();
+
+    uint8_t protocol = static_cast<uint8_t>(values.protocol);
+
+    auto srcIPHash = hash_function(srcIP);
+    auto dstIPHash = hash_function(dstIP);
+    auto srcPortHash = hash_function(values.srcPort);
+    auto dstPortHash = hash_function(values.dstPort);
+    auto protocolHash = hash_function(protocol);
+
+   return srcIPHash ^ (dstIPHash << 1) ^ (srcPortHash << 2) ^ (dstPortHash << 3) ^ protocolHash; 
 }
 
 flow_seq check_flow(const std::unique_ptr<pcpp::IFileReaderDevice> &reader){
