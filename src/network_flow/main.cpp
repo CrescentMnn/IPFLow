@@ -26,14 +26,14 @@ struct ThresholdConfig {
     uint32_t max_normal_packet_size = 1518;
     double min_flow_duration = 0.1;
     double max_flow_duration = 3600;
-}
+};
 
 enum class TransportProtocol : uint8_t{
-    TCP;
-    UDP;
-    ICMP;
-    OTHER;
-}
+    TCP,
+    UDP,
+    ICMP,
+    OTHER
+};
 
 struct flow_seq{
     pcpp::IPv4Address srcIP;
@@ -48,7 +48,7 @@ struct flow_seq{
     //timestamps
     double first_seen;
     double last_seen;
-}
+};
 
 //this will make the flow
 struct map_val{
@@ -57,22 +57,35 @@ struct map_val{
     uint16_t srcPort;
     uint16_t dstPort;
     TransportProtocol protocol;
-}
+};
 
-//apply hash for hash key
-size_t create_key(const map_val& values){
-    std::string srcIP = values.srcIP.toString();
-    std::string dstIP = values.dstIP.toString();
+//hash map constructors
+struct MapValHash{
+    size_t operator()(const map_val& values) const{
+        std::string srcIP = values.srcIP.toString();
+        std::string dstIP = values.dstIP.toString();
 
-    uint8_t protocol = static_cast<uint8_t>(values.protocol);
+        uint8_t protocol = static_cast<uint8_t>(values.protocol);
 
-    auto srcIPHash = hash_function(srcIP);
-    auto dstIPHash = hash_function(dstIP);
-    auto srcPortHash = hash_function(values.srcPort);
-    auto dstPortHash = hash_function(values.dstPort);
-    auto protocolHash = hash_function(protocol);
+        auto srcIPHash = hash_function(srcIP);
+        auto dstIPHash = hash_function(dstIP);
+        auto srcPortHash = hash_function(values.srcPort);
+        auto dstPortHash = hash_function(values.dstPort);
+        auto protocolHash = hash_function(protocol);
 
-   return srcIPHash ^ (dstIPHash << 1) ^ (srcPortHash << 2) ^ (dstPortHash << 3) ^ protocolHash; 
+        return srcIPHash ^ (dstIPHash << 1) ^ (srcPortHash << 2) ^ (dstPortHash << 3) ^ protocolHash;
+    }
+};
+
+struct MapValEqual{
+    bool operator()(const map_val& lhs, const map_val& rhs) const{
+        return lhs.srcIP == rhs.srcIP && lhs.dstIP == rhs.dstIP && lhs.srcPort == rhs.srcPort && lhs.dstPort == rhs.dstPort && lhs.protocol == rhs.protocol;
+    }
+};
+
+//create hash map || DHOULD DELETE AND DECLARE WHERE NEEDED
+std::unordered_map create_map(){
+    return std::unordered_map<map_val, flow_seq, MapValHash, MapValEqual>;
 }
 
 flow_seq check_flow(const std::unique_ptr<pcpp::IFileReaderDevice> &reader){
@@ -81,7 +94,7 @@ flow_seq check_flow(const std::unique_ptr<pcpp::IFileReaderDevice> &reader){
 
    //will add flow parameters here
    while(reader->getNextPacket(rawPacket)){
-	pcapp::Packet parsedPacket(&rawPacket);
+	pcpp::Packet parsedPacket(&rawPacket);
         if(parsedPacket.isPacketOfType(pcpp::IPv4)){
 	    pcpp::IPv4Address srcIP = parsedPacket.getLayerOfType<pcpp::IPv4Layer>()->getSrcIPv4Address();
 	    flow.srcIP = srcIP;
@@ -89,7 +102,7 @@ flow_seq check_flow(const std::unique_ptr<pcpp::IFileReaderDevice> &reader){
 	    flow.dstIP = dstIP;
 
 	    if(parsedPacket.isOfType(pcpp::TCP)){
-	        flow.protocol = 0;
+	        flow.protocol = TransportProtocol::TCP;
 		auto* tcpLayer = parsedPacket.getLayerOfType<pcpp::TcpLayer>();
 		if(tcpLayer == nullptr){
 		    std::cerr << "Something went wrong with TCP layer..." << std::endl; return 1;
@@ -97,7 +110,7 @@ flow_seq check_flow(const std::unique_ptr<pcpp::IFileReaderDevice> &reader){
 		flow.srcPort = tcpLayer.getSrcPort();
 		flow.dstPort = tcpLayer.getDstPort();
 	    }else if(parsedPacket.isOfType(pcpp::UDP)){
-		flow.protocol = 1;
+		flow.protocol = TransportProtocol::UDP;
 		auto* udpLayer = parsedPacket.getLayerOfType<pcpp::UdpLayer>();
 		if(udpLayer == nullptr){
 		    std::cerr << "Something went wrong with UDP layer..." << std::endl; return 1;
@@ -105,7 +118,7 @@ flow_seq check_flow(const std::unique_ptr<pcpp::IFileReaderDevice> &reader){
 		flow.srcPort = udpLayer.getSrcPort();
 		flow.dstPort = udpLayer.getDstPort();
 	    }else if(parsedPacket.isOfType(pcpp::ICMP)){
-		flow.protocol = 2;
+		flow.protocol = TransportProtocol::ICMP;
 		auto* icmpLayer = parsedPacket.getLayerOfType<pcpp::IcmpLayer>();
 		if(icmpLayer == nullptr){
 		    std::cerr << "Something went wrong with ICMP layer..." << std::endl; return 1;
@@ -114,7 +127,7 @@ flow_seq check_flow(const std::unique_ptr<pcpp::IFileReaderDevice> &reader){
 		flow.dstPort = 0;
     		//maybe ICMP object is unnecesary to this
 	    }else{
-	        flow.protocol = 3;
+	        flow.protocol = TransportProtocol::OTHER;
 	    }
 
 	    auto rawPacket = parsedPacket.getRawPacket();
