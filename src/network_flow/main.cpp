@@ -88,55 +88,79 @@ std::unordered_map create_map(){
     return std::unordered_map<map_val, flow_seq, MapValHash, MapValEqual>;
 }
 
-flow_seq check_flow(const std::unique_ptr<pcpp::IFileReaderDevice> &reader){
+void check_flow(const std::unique_ptr<pcpp::IFileReaderDevice> &reader, std::unordered_map<map_val, flow_seq, MapValHash, MapValEqual>& flow_map){
    pcpp::RawPacket rawPacket;
-   flow_seq flow;
 
-   //will add flow parameters here
+   //read while there are packets
    while(reader->getNextPacket(rawPacket)){
 	pcpp::Packet parsedPacket(&rawPacket);
+	
+	map_val new_tuple;
+	//check if IPv4 (for now, IPv6 too later)
         if(parsedPacket.isPacketOfType(pcpp::IPv4)){
 	    pcpp::IPv4Address srcIP = parsedPacket.getLayerOfType<pcpp::IPv4Layer>()->getSrcIPv4Address();
-	    flow.srcIP = srcIP;
-	    pcpp::IPv4Address dstIP = parsedPacket.getLayerOfType<pcpp::IPv4Layer>()->getDstIPv4Address();
-	    flow.dstIP = dstIP;
+	    new_tuple.srcIP = srcIP;
 
+	    pcpp::IPv4Address dstIP = parsedPacket.getLayerOfType<pcpp::IPv4Layer>()->getDstIPv4Address();
+	    new_tuple.dstIP = dstIP;
+	    
+	    //check transport protocol
 	    if(parsedPacket.isOfType(pcpp::TCP)){
-	        flow.protocol = TransportProtocol::TCP;
+		new_tuple.protocol = TransportProtocol::TCP;
 		auto* tcpLayer = parsedPacket.getLayerOfType<pcpp::TcpLayer>();
 		if(tcpLayer == nullptr){
-		    std::cerr << "Something went wrong with TCP layer..." << std::endl; return 1;
+		    std::cerr << "Something went wrong with TCP layer..." << std::endl; return;
 		}
-		flow.srcPort = tcpLayer.getSrcPort();
-		flow.dstPort = tcpLayer.getDstPort();
+		new_tuple.srcPort = tcpLayer.getSrcPort();
+		new_tuple.dstPort = tcpLayer.getDstPort();
 	    }else if(parsedPacket.isOfType(pcpp::UDP)){
-		flow.protocol = TransportProtocol::UDP;
+		new_tuple.protocol = TransportProtocol::UDP;
+		auto* tcpLayer = parsedPacket.getLayerOfType<pcpp::TcpLayer>();
 		auto* udpLayer = parsedPacket.getLayerOfType<pcpp::UdpLayer>();
 		if(udpLayer == nullptr){
-		    std::cerr << "Something went wrong with UDP layer..." << std::endl; return 1;
+		    std::cerr << "Something went wrong with UDP layer..." << std::endl; return;
 		}
-		flow.srcPort = udpLayer.getSrcPort();
-		flow.dstPort = udpLayer.getDstPort();
+		new_tuple.srcPort = udpLayer.getSrcPort();
+		new_tuple.dstPort = udpLayer.getDstPort();
 	    }else if(parsedPacket.isOfType(pcpp::ICMP)){
-		flow.protocol = TransportProtocol::ICMP;
+		new_tuple.protocol = TransportProtocol::ICMP;
 		auto* icmpLayer = parsedPacket.getLayerOfType<pcpp::IcmpLayer>();
 		if(icmpLayer == nullptr){
-		    std::cerr << "Something went wrong with ICMP layer..." << std::endl; return 1;
+		    std::cerr << "Something went wrong with ICMP layer..." << std::endl; return;
 		}
-                flow.srcPort = 0;
-		flow.dstPort = 0;
+		new_tuple.srcPort = 0;
+		new_tuple.dstPort = 0;
     		//maybe ICMP object is unnecesary to this
 	    }else{
-	        flow.protocol = TransportProtocol::OTHER;
+	        new_tuple.protocol = TransportProtocol::OTHER;
 	    }
+	    
+ 	    //check map for stats
+            auto item = flow_map.find(new_tuple);
 
-	    auto rawPacket = parsedPacket.getRawPacket();
-	    flow.first_seen = rawPacket.getPacketTimeStamp();
-	    flow.byte_count += rawPacket.getRawDataLen();
-	    flow.packet_count++;
+	    if(item != flow_map.end()){
+	        //FOUND VALUE
+		item->second.packet_count++;
+		item->second.byte_count+=rawPacket.getRawDataLen();
+		//TODO: parse timespec into double value
+		item->second.last_seen=rawPacket.getPacketTimeStamp();
+	    }else{
+	        //NOT FOUND
+                flow_seq new_flow = { 
+			new_tuple.srcIP,
+			new_tuple.dstIP,
+			new_tuple.protocol,
+			new_tuple.srcPort,
+			new_tuple.dstPort,
+			1,
+			rawPacket.getRawDataLen(),
+			rawPacket.getPacketTimeStamp(),
+			rawPacket.getPacketTimeStamp()
+		};
+		flow_map[new_tuple] = new_flow;
+	    }
 	}
     }
-    return flow;
 }
 
 int main(){
@@ -156,7 +180,9 @@ int main(){
         std::cerr << "Error applying filter..." << std::endl;
 	return 1;
     }
-
+    
+    //create map and pass it to fn
+    std::unordered_map<map_val, flow_seq, MapValHash, MapValEqual> flow_map;
     pcpp::RawPacket rawPacket;
 
     while(reader->getNextPacket(rawPacket)){
