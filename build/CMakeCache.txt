@@ -148,7 +148,7 @@ CMAKE_PROJECT_DESCRIPTION:STATIC=
 CMAKE_PROJECT_HOMEPAGE_URL:STATIC=
 
 //Value Computed by CMake
-CMAKE_PROJECT_NAME:STATIC=Tutorial-HelloWorld
+CMAKE_PROJECT_NAME:STATIC=IPFLow
 
 //Path to a program.
 CMAKE_RANLIB:FILEPATH=/usr/bin/ranlib
@@ -211,6 +211,15 @@ CMAKE_STRIP:FILEPATH=/usr/bin/strip
 // during the make.  This is useful for debugging only. With Visual
 // Studio IDE projects all commands are done without /nologo.
 CMAKE_VERBOSE_MAKEFILE:BOOL=FALSE
+
+//Value Computed by CMake
+IPFLow_BINARY_DIR:STATIC=/home/moon/Documents/projects/IPFLow/build
+
+//Value Computed by CMake
+IPFLow_IS_TOP_LEVEL:STATIC=ON
+
+//Value Computed by CMake
+IPFLow_SOURCE_DIR:STATIC=/home/moon/Documents/projects/IPFLow
 
 //Path to a file.
 PCAP_INCLUDE_DIR:PATH=/usr/include

@@ -1,8 +1,10 @@
 cmake_minimum_required(VERSION 3.12)
 
-project(Tutorial-HelloWorld)
+project(IPFLow)
 
-add_executable("${PROJECT_NAME}" src/network_flow/main.cpp)
+add_executable("${PROJECT_NAME}" src/network_flow/main.cpp src/network_flow/hash_functions.cpp)
+
+include_directories(${PROJECT_SOURCE_DIR}/include)
 
 find_package(PcapPlusPlus REQUIRED)
 
