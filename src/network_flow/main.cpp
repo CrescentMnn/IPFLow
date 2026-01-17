@@ -7,6 +7,7 @@
 #include <IcmpLayer.h>
 #include <Packet.h>
 #include <PcapFileDevice.h>
+#include <set>
 
 #include "hash_functions.h"
 
@@ -83,6 +84,28 @@ struct MapValEqual{
     }
 };
 
+void check_threshold(const std::unordered_map<map_val, flow_seq, MapValHash, MapValEqual>& flow_map){
+    ThresholdConfig threshold_check;
+    size_t ip_count = 0;
+    size_t uniq_port = 0;
+
+    //helper hash map for counting and keep track of uniq ports/ip
+    //using set to chceck for uniq values (O(log n) ^-^)
+    std::unordered_map<std::string, std::set<uint16_t>> record;
+
+    for(const auto& key : flow_map){
+        record[key.first.srcIP.toString()].insert(key.first.dstPort);
+    }
+    //debug check
+    std::cout << record.size() << std::endl;
+    for(const auto& [ip, ports] : record){
+        if(ports.size() > threshold_check.unique_ports){
+	    std::cerr << "[ALERT] FLAG FOUND!!!!! Check connection " << ip << " Unique ports: " << ports.size() << std::endl;
+	}
+    }
+
+}
+
 void check_flow(const std::unique_ptr<pcpp::IFileReaderDevice> &reader, std::unordered_map<map_val, flow_seq, MapValHash, MapValEqual>& flow_map){
    pcpp::RawPacket rawPacket;
 
@@ -141,6 +164,7 @@ void check_flow(const std::unique_ptr<pcpp::IFileReaderDevice> &reader, std::uno
 		item->second.byte_count+=rawPacket.getRawDataLen();
 		//TODO: parse timespec into double value
 		item->second.last_seen = packetTime;
+
 	    }else{
 	        //NOT FOUND
                 flow_seq new_flow = { 
@@ -162,7 +186,7 @@ void check_flow(const std::unique_ptr<pcpp::IFileReaderDevice> &reader, std::uno
 
 int main(){
    
-    std::unique_ptr<pcpp::IFileReaderDevice> reader(pcpp::IFileReaderDevice::getReader("test.pcap"));
+    std::unique_ptr<pcpp::IFileReaderDevice> reader(pcpp::IFileReaderDevice::getReader("nmap.pcap"));
     if(reader == nullptr){
         std::cerr << "Error determining the pcap file" << std::endl;
 	return 1;
@@ -185,7 +209,9 @@ int main(){
     check_flow(reader, flow_map);
 
     reader->close();
-    
+   
+    check_threshold(flow_map);
+
     auto print_key_value = [](const auto& key, const auto& value) {
         std::cout << "Flow: " << key.srcIP.toString() << ":" << key.srcPort << " -> " 
               << key.dstIP.toString() << ":" << key.dstPort 
@@ -193,8 +219,8 @@ int main(){
               << " | Bytes: " << value.byte_count << "\n";
     };
 
-    for(const auto& a : flow_map)
-        print_key_value(a.first, a.second);
+    //for(const auto& a : flow_map)
+    //    print_key_value(a.first, a.second);
     
 
     return 0;
