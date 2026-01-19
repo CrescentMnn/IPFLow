@@ -86,22 +86,46 @@ struct MapValEqual{
 
 void check_threshold(const std::unordered_map<map_val, flow_seq, MapValHash, MapValEqual>& flow_map){
     ThresholdConfig threshold_check;
-    size_t ip_count = 0;
-    size_t uniq_port = 0;
 
+//-------------------------UNIQUE_PORTS----------------------------------------
     //helper hash map for counting and keep track of uniq ports/ip
     //using set to chceck for uniq values (O(log n) ^-^)
-    std::unordered_map<std::string, std::set<uint16_t>> record;
+    {
+        std::unordered_map<std::string, std::set<uint16_t>> record;
 
-    for(const auto& key : flow_map){
-        record[key.first.srcIP.toString()].insert(key.first.dstPort);
+        for(const auto& key : flow_map){
+            record[key.first.srcIP.toString()].insert(key.first.dstPort);
+        }
+        //debug check
+        std::cout << record.size() << std::endl;
+    
+        for(const auto& [ip, ports] : record){
+            if(ports.size() > threshold_check.unique_ports){
+	        std::cerr << "[ALERT] FLAG FOUND!!!!! Check connection " << ip << " Unique ports: " << ports.size() << std::endl;
+	    } 
+        }
     }
-    //debug check
-    std::cout << record.size() << std::endl;
-    for(const auto& [ip, ports] : record){
-        if(ports.size() > threshold_check.unique_ports){
-	    std::cerr << "[ALERT] FLAG FOUND!!!!! Check connection " << ip << " Unique ports: " << ports.size() << std::endl;
+
+//--------------------------MIN_MAX_FLOW_DURATION---------------------------
+    //helper hash for check flow_duration
+    {
+        double time_result;
+	for(const auto& key : flow_map){
+	    time_result = (key.second.last_seen) - (key.second.first_seen);
+	    record[key.first.srcIP.toString()].insert(time_result);
+	    if(time_result > threshold_check.max_flow_duration){
+                std::cerr << "[ALERT] FLAG FOUND!!!!! Check connection " << ip << " Duration: " << time_duration  << std::endl;
+	    }else if(time_result < threshold_check.min_flow_duration){
+		std::cerr << "[ALERT] FLAG FOUND!!!!! Check connection " << ip << " Duration: " << time_duration << std::endl;
+	    }
 	}
+    }
+
+//------------------------------------MIN_MAX_NORMAL_PACKET_SIZE--------------------------
+    {
+        //TODO: MOVE TO CHECK_FLOW || implement rawPacket for checking min and max packet sizes?
+	//would have to check packets as they come (live) or read through whole file
+        std::unordered_map<std::string, std::set<>> record;
     }
 
 }
