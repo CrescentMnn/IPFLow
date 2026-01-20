@@ -8,6 +8,8 @@
 #include <Packet.h>
 #include <PcapFileDevice.h>
 #include <set>
+#include <cfloat>
+#include <algorithm>
 
 #include "hash_functions.h"
 
@@ -49,6 +51,11 @@ struct flow_seq{
     //timestamps
     double first_seen;
     double last_seen;
+
+
+    bool operator<(const flow_seq& other) const {
+        return srcIP < other.srcIP;
+    }
 };
 
 //this will make the flow
@@ -109,14 +116,24 @@ void check_threshold(const std::unordered_map<map_val, flow_seq, MapValHash, Map
 //--------------------------MIN_MAX_FLOW_DURATION---------------------------
     //helper hash for check flow_duration
     {
-        double time_result;
+	std::unordered_map<std::string, std::set<flow_seq>> record;
+
 	for(const auto& key : flow_map){
-	    time_result = (key.second.last_seen) - (key.second.first_seen);
-	    record[key.first.srcIP.toString()].insert(time_result);
-	    if(time_result > threshold_check.max_flow_duration){
-                std::cerr << "[ALERT] FLAG FOUND!!!!! Check connection " << ip << " Duration: " << time_duration  << std::endl;
-	    }else if(time_result < threshold_check.min_flow_duration){
-		std::cerr << "[ALERT] FLAG FOUND!!!!! Check connection " << ip << " Duration: " << time_duration << std::endl;
+	    record[key.first.srcIP.toString()].insert(key.second);
+	}
+	for(const auto& [ip, sequence] : record){
+	    double earliest = DBL_MAX;
+	    double latest = 0.0;
+
+	    for(const auto& flow_entry : sequence){
+                earliest = std::min(earliest, flow_entry.first_seen);
+		latest = std::max(latest, flow_entry.last_seen);
+	    }
+
+	    double total_duration = latest - earliest;
+
+	    if(total_duration > 0.0 && (total_duration > threshold_check.max_flow_duration || total_duration < threshold_check.min_flow_duration)){
+	        std::cerr << "[ALERT] FLAG FOUND!!!!! Check connection: " << ip << " Was active for: " << total_duration << "s Across: " << sequence.size() << " flows." << std::endl; 
 	    }
 	}
     }
@@ -125,7 +142,7 @@ void check_threshold(const std::unordered_map<map_val, flow_seq, MapValHash, Map
     {
         //TODO: MOVE TO CHECK_FLOW || implement rawPacket for checking min and max packet sizes?
 	//would have to check packets as they come (live) or read through whole file
-        std::unordered_map<std::string, std::set<>> record;
+//        std::unordered_map<std::string, std::set<>> record;
     }
 
 }
@@ -210,7 +227,7 @@ void check_flow(const std::unique_ptr<pcpp::IFileReaderDevice> &reader, std::uno
 
 int main(){
    
-    std::unique_ptr<pcpp::IFileReaderDevice> reader(pcpp::IFileReaderDevice::getReader("nmap.pcap"));
+    std::unique_ptr<pcpp::IFileReaderDevice> reader(pcpp::IFileReaderDevice::getReader("udp_flood.pcap"));
     if(reader == nullptr){
         std::cerr << "Error determining the pcap file" << std::endl;
 	return 1;
